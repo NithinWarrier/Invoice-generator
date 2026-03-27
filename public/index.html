@@ -380,7 +380,7 @@
 
       <div class="summary-block">
         <div class="summary-header">
-          <label>Work Summary</label>
+          <label id="summaryLabel">Work Summary</label>
           <button class="btn-copy" id="copyBtn" onclick="copyToClipboard()">
             <span>⎘</span><span id="copyBtnText">Copy</span>
           </button>
@@ -444,7 +444,9 @@
           list.appendChild(li);
         });
 
-        // Cache data and reset invoice section
+        // Update Work Summary label with month
+        document.getElementById('summaryLabel').textContent =
+          data.month ? `Work Summary for ${data.month}` : 'Work Summary';
         lastData = data;
         document.getElementById('docLinkBox').classList.remove('visible');
         document.getElementById('docLink').href = '#';

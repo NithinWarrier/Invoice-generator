@@ -106,6 +106,7 @@ app.get('/api/generate', async (req, res) => {
     const summaries = [];
     let totalHours = 0;
     let checkedCount = 0;
+    const monthCounts = {};
 
     for (const row of rows) {
       // Stop at the first row where column A is empty
@@ -115,6 +116,20 @@ app.get('/api/generate', async (req, res) => {
       const isBilled = checkmark === 'TRUE';
       if (isBilled) { checkedCount++; continue; }
 
+      // Track month from column A date (format: dd/mm/yyyy) for unbilled rows
+      const dateStr = (row[0] || '').trim();
+      if (dateStr) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          // parts[0]=dd, parts[1]=mm, parts[2]=yyyy
+          const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          if (!isNaN(d)) {
+            const key = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            monthCounts[key] = (monthCounts[key] || 0) + 1;
+          }
+        }
+      }
+
       const description = (row[COL_DESCRIPTION] || '').trim();
       const hours = parseFloat(row[COL_HOURS]) || 0;
 
@@ -122,10 +137,14 @@ app.get('/api/generate', async (req, res) => {
       if (hours > 0) totalHours += hours;
     }
 
+    // Pick the most frequent month among unbilled rows
+    const month = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
     res.json({
       balance: parseFloat(balance),
       totalHours: Math.round(totalHours * 100) / 100,
       summaries,
+      month,
     });
   } catch (err) {
     console.error('Error fetching sheet:', err.message);

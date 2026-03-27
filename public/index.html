@@ -251,8 +251,11 @@
       font-size: 0.88rem;
       line-height: 1.65;
       padding: 1rem 1.1rem;
-      min-height: 180px;
+      max-height: 180px;
+      overflow-y: auto;
       list-style: none;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
 
     .summary-display li {
@@ -267,6 +270,44 @@
       flex-shrink: 0;
       font-size: 1rem;
       line-height: 1.65;
+    }
+
+    .description-block {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .description-block label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .description-block textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem;
+      line-height: 1.65;
+      padding: 0.85rem 1.1rem;
+      resize: none;
+      outline: none;
+      transition: border-color 0.2s;
+      height: 72px;
+    }
+
+    .description-block textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .description-block textarea::placeholder {
+      color: var(--text-muted);
     }
 
     .error-box {
@@ -388,6 +429,11 @@
         <ul class="summary-display" id="summaryList"></ul>
       </div>
 
+      <div class="description-block">
+        <label for="descriptionText">Invoice Description</label>
+        <textarea id="descriptionText" placeholder="Paste a one-liner summary to include in the invoice…"></textarea>
+      </div>
+
       <button class="btn-create" id="createBtn" onclick="createInvoice()">
         <span id="createBtnIcon">📄</span>
         <span id="createBtnText">Create Invoice</span>
@@ -404,6 +450,35 @@
   <script>
     // Store last-fetched data for use by createInvoice()
     let lastData = null;
+
+    // On load: detect the month from the sheet and update the button label
+    async function initMonth() {
+      const btn  = document.getElementById('generateBtn');
+      const icon = document.getElementById('btnIcon');
+      const text = document.getElementById('btnText');
+      const spin = document.getElementById('spinner');
+
+      // Show loading state while fetching month
+      btn.disabled = true;
+      icon.style.display = 'none';
+      spin.style.display = 'block';
+      text.textContent = 'Loading…';
+
+      try {
+        const r = await fetch('/api/month');
+        const data = await r.json();
+        text.textContent = data.month
+          ? `Generate Invoice for ${data.month}`
+          : 'Generate Invoice';
+      } catch (_) {
+        text.textContent = 'Generate Invoice';
+      } finally {
+        btn.disabled = false;
+        icon.style.display = 'inline';
+        spin.style.display = 'none';
+      }
+    }
+    initMonth();
 
     async function generate() {
       const btn = document.getElementById('generateBtn');
@@ -496,10 +571,11 @@
       linkBox.classList.remove('visible');
 
       try {
+        const description = document.getElementById('descriptionText').value.trim();
         const r = await fetch('/api/create-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(lastData),
+          body: JSON.stringify({ ...lastData, description }),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'Server error');

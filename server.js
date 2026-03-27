@@ -152,9 +152,51 @@ app.get('/api/generate', async (req, res) => {
   }
 });
 
+// ── Lightweight month detection (called on page load) ─────────────────────
+app.get('/api/month', async (req, res) => {
+  try {
+    const auth = getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetName = meta.data.sheets[0].properties.title;
+
+    const rowsResp = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A2:G1000`,
+    });
+
+    const rows = rowsResp.data.values || [];
+    const monthCounts = {};
+
+    for (const row of rows) {
+      if (!(row[0] || '').trim()) break;
+      const checkmark = (row[COL_CHECKMARK] || '').trim().toUpperCase();
+      if (checkmark === 'TRUE') continue;
+
+      const parts = (row[0] || '').trim().split('/');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        if (!isNaN(d)) {
+          const key = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+          monthCounts[key] = (monthCounts[key] || 0) + 1;
+        }
+      }
+    }
+
+    const month = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    res.json({ month });
+  } catch (err) {
+    console.error('Error detecting month:', err.message);
+    res.status(500).json({ month: null });
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────
+
 // ── Create Invoice: populate Google Doc template ─────────────────────────
 app.post('/api/create-invoice', async (req, res) => {
-  const { balance, totalHours, summaries } = req.body;
+  const { balance, totalHours, summaries, description } = req.body;
   const docId = process.env.GOOGLE_DOC_ID;
 
   if (!docId) {
@@ -178,7 +220,7 @@ app.post('/api/create-invoice', async (req, res) => {
     // 2. Format values
     const balanceStr = '$' + Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const hoursStr   = totalHours + ' hrs';
-
+    const dateStr    = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
     // 3. Replace placeholders in the copied doc
     await docs.documents.batchUpdate({
@@ -195,6 +237,18 @@ app.post('/api/create-invoice', async (req, res) => {
             replaceAllText: {
               containsText: { text: '{{TOTAL_HOURS}}', matchCase: true },
               replaceText: hoursStr,
+            },
+          },
+          {
+            replaceAllText: {
+              containsText: { text: '{{DATE}}', matchCase: true },
+              replaceText: dateStr,
+            },
+          },
+          {
+            replaceAllText: {
+              containsText: { text: '{{DESCRIPTION}}', matchCase: true },
+              replaceText: description || '',
             },
           },
 

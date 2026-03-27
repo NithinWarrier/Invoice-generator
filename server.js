@@ -1,0 +1,137 @@
+require('dotenv').config({ path: '.env.local' });
+const express = require('express');
+const { google } = require('googleapis');
+
+const path = require('path');
+
+const app = express();
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Column config (0-based index)
+const COL_CHECKMARK   = 6;  // G
+const COL_DESCRIPTION = 1;  // B
+const COL_HOURS       = 4;  // E
+const BALANCE_RANGE   = 'K16';
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+];
+
+function getAuthClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  });
+  return oauth2Client;
+}
+
+// ── One-time auth flow ────────────────────────────────────────────────────
+// Step 1: visit http://localhost:3000/auth → redirects to Google consent screen
+app.get('/auth', (req, res) => {
+  const client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  const url = client.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',   // forces Google to return a refresh_token every time
+    scope: SCOPES,
+  });
+  res.redirect(url);
+});
+
+// Step 2: Google redirects back here with ?code=...
+// The page shows you the refresh token — copy it into .env.local
+app.get('/api/auth/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).send('Missing code parameter');
+
+  try {
+    const client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+    const { tokens } = await client.getToken(code);
+    res.send(`
+      <html><body style="font-family:monospace;padding:2rem;background:#0d0f14;color:#e8eaf0">
+        <h2 style="color:#51cf66">✅ Auth successful!</h2>
+        <p>Copy the line below into your <code>.env.local</code> file:</p>
+        <pre style="background:#1e2330;padding:1rem;border-radius:8px;color:#748ffc;word-break:break-all">GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}</pre>
+        <p style="color:#7a8094;margin-top:1rem">Then restart the server with <code>node server.js</code> and go to <a href="/" style="color:#5c7cfa">the app</a>.</p>
+      </body></html>
+    `);
+  } catch (err) {
+    res.status(500).send('Error getting token: ' + err.message);
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────
+
+app.get('/api/generate', async (req, res) => {
+  try {
+    const auth = getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+
+    // Get the first sheet name
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetName = meta.data.sheets[0].properties.title;
+
+    // Fetch balance and all data rows in parallel
+    const [balanceResp, rowsResp] = await Promise.all([
+      sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!${BALANCE_RANGE}`,
+      }),
+      sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A2:G1000`,
+      }),
+    ]);
+
+    // Parse balance
+    const rawBalance = balanceResp.data.values?.[0]?.[0] ?? '0';
+    const balance = rawBalance.replace(/[^0-9.-]/g, '') || '0';
+
+    // Process rows: filter out checked rows
+    const rows = rowsResp.data.values || [];
+    const summaries = [];
+    let totalHours = 0;
+    let checkedCount = 0;
+
+    for (const row of rows) {
+      // Stop at the first row where column A is empty
+      if (!(row[0] || '').trim()) break;
+
+      const checkmark = (row[COL_CHECKMARK] || '').trim().toUpperCase();
+      const isBilled = checkmark === 'TRUE';
+      if (isBilled) { checkedCount++; continue; }
+
+      const description = (row[COL_DESCRIPTION] || '').trim();
+      const hours = parseFloat(row[COL_HOURS]) || 0;
+
+      if (description) summaries.push(description);
+      if (hours > 0) totalHours += hours;
+    }
+
+    res.json({
+      balance: parseFloat(balance),
+      totalHours: Math.round(totalHours * 100) / 100,
+      summaries,
+    });
+  } catch (err) {
+    console.error('Error fetching sheet:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Invoice generator running at http://localhost:${PORT}`);
+  console.log(`To get a refresh token, visit: http://localhost:${PORT}/auth`);
+});

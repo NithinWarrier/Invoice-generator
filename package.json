@@ -1,0 +1,16 @@
+{
+  "name": "invoice-generator",
+  "version": "1.0.0",
+  "description": "Monthly invoice generator from Google Sheets",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "googleapis": "^140.0.0",
+    "openai": "^6.33.0"
+  }
+}

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invoice Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a23;
+      --surface2: #1e2330;
+      --border: #2a2f3d;
+      --accent: #5c7cfa;
+      --accent-glow: rgba(92, 124, 250, 0.25);
+      --accent-hover: #748ffc;
+      --success: #51cf66;
+      --text: #e8eaf0;
+      --text-muted: #7a8094;
+      --red: #ff6b6b;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 620px;
+      padding: 2.5rem;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), #845ef7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+
+    .card-header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .card-header p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .btn-generate {
+      width: 100%;
+      padding: 0.875rem 1.5rem;
+      background: linear-gradient(135deg, var(--accent), #845ef7);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 0 0 0 var(--accent-glow);
+      letter-spacing: 0.01em;
+    }
+
+    .btn-generate:hover:not(:disabled) {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+
+    .btn-generate:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-generate:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .results {
+      margin-top: 1.75rem;
+      display: none;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .results.visible {
+      display: flex;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .stat-card .label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-card .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-card.balance .value {
+      color: var(--success);
+    }
+
+    .stat-card.hours .value {
+      color: var(--accent);
+    }
+
+    .summary-block label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .summary-block textarea,
+    .summary-block input[type='text'] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem;
+      line-height: 1.65;
+      padding: 1rem 1.1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .summary-block textarea {
+      min-height: 180px;
+      resize: vertical;
+    }
+
+    .summary-block input[type='text'] {
+      height: 48px;
+    }
+
+    .summary-block textarea:focus,
+    .summary-block input[type='text']:focus {
+      border-color: var(--accent);
+    }
+
+    .error-box {
+      margin-top: 1.25rem;
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 10px;
+      padding: 0.8rem 1.1rem;
+      color: var(--red);
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .error-box.visible {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="card-header">
+      <div class="logo">📄</div>
+      <div>
+        <h1>Invoice Generator</h1>
+        <p>Reads your timesheet and generates monthly invoice data</p>
+      </div>
+    </div>
+
+    <button id="generateBtn" class="btn-generate" onclick="generate()">
+      <span id="btnIcon">⚡</span>
+      <span id="btnText">Generate Invoice</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="results" id="results">
+      <div class="stat-row">
+        <div class="stat-card balance">
+          <div class="label">Balance Due</div>
+          <div class="value" id="balanceVal">—</div>
+        </div>
+        <div class="stat-card hours">
+          <div class="label">Total Hours</div>
+          <div class="value" id="hoursVal">—</div>
+        </div>
+      </div>
+
+      <div class="summary-block">
+        <label>Work Summary</label>
+        <textarea id="summaryText" placeholder="Task descriptions will appear here…"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function generate() {
+      const btn = document.getElementById('generateBtn');
+      const icon = document.getElementById('btnIcon');
+      const text = document.getElementById('btnText');
+      const spin = document.getElementById('spinner');
+      const err = document.getElementById('errorBox');
+      const res = document.getElementById('results');
+
+      // Reset
+      btn.disabled = true;
+      icon.style.display = 'none';
+      spin.style.display = 'block';
+      text.textContent = 'Fetching data…';
+      err.classList.remove('visible');
+      res.classList.remove('visible');
+
+      try {
+        const r = await fetch('/api/generate');
+        const data = await r.json();
+
+        if (!r.ok) throw new Error(data.error || 'Server error');
+
+        // Populate stats
+        document.getElementById('balanceVal').textContent =
+          '$' + Number(data.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+        document.getElementById('hoursVal').textContent =
+          data.totalHours + ' hrs';
+
+        // Populate summary as bullet list
+        document.getElementById('summaryText').value =
+          data.summaries.length
+            ? data.summaries.map(s => '• ' + s).join('\n')
+            : 'No unbilled tasks found.';
+
+        res.classList.add('visible');
+      } catch (e) {
+        err.textContent = '❌ ' + e.message;
+        err.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        icon.style.display = 'inline';
+        spin.style.display = 'none';
+        text.textContent = 'Generate Invoice';
+      }
+    }
+  </script>
+</body>
+
+</html>

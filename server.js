@@ -5,6 +5,7 @@ const { google } = require('googleapis');
 const path = require('path');
 
 const app = express();
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Column config (0-based index)
@@ -15,6 +16,8 @@ const BALANCE_RANGE   = 'K16';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/drive',
 ];
 
 function getAuthClient() {
@@ -129,6 +132,66 @@ app.get('/api/generate', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Create Invoice: populate Google Doc template ─────────────────────────
+app.post('/api/create-invoice', async (req, res) => {
+  const { balance, totalHours, summaries } = req.body;
+  const docId = process.env.GOOGLE_DOC_ID;
+
+  if (!docId) {
+    return res.status(400).json({ error: 'GOOGLE_DOC_ID is not set in .env.local' });
+  }
+
+  try {
+    const auth = getAuthClient();
+    const drive = google.drive({ version: 'v3', auth });
+    const docs  = google.docs({ version: 'v1', auth });
+
+    // 1. Copy the template so the original stays pristine
+    const copyRes = await drive.files.copy({
+      fileId: docId,
+      requestBody: {
+        name: `Invoice – ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+      },
+    });
+    const newDocId = copyRes.data.id;
+
+    // 2. Format values
+    const balanceStr = '$' + Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const hoursStr   = totalHours + ' hrs';
+
+
+    // 3. Replace placeholders in the copied doc
+    await docs.documents.batchUpdate({
+      documentId: newDocId,
+      requestBody: {
+        requests: [
+          {
+            replaceAllText: {
+              containsText: { text: '{{BALANCE_DUE}}', matchCase: true },
+              replaceText: balanceStr,
+            },
+          },
+          {
+            replaceAllText: {
+              containsText: { text: '{{TOTAL_HOURS}}', matchCase: true },
+              replaceText: hoursStr,
+            },
+          },
+
+        ],
+      },
+    });
+
+    const docUrl = `https://docs.google.com/document/d/${newDocId}/edit`;
+    res.json({ docUrl });
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    console.error('Error creating invoice doc:', JSON.stringify(detail, null, 2));
+    res.status(500).json({ error: err.response?.data?.error?.message || err.message });
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

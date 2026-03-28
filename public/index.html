@@ -527,6 +527,8 @@
         document.getElementById('docLink').href = '#';
 
         res.classList.add('visible');
+        document.getElementById('generateBtn').style.display = 'none';
+
       } catch (e) {
         err.textContent = '❌ ' + e.message;
         err.classList.add('visible');

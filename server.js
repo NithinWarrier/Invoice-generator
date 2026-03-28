@@ -196,7 +196,7 @@ app.get('/api/month', async (req, res) => {
 
 // ── Create Invoice: populate Google Doc template ─────────────────────────
 app.post('/api/create-invoice', async (req, res) => {
-  const { balance, totalHours, summaries, description } = req.body;
+  const { balance, totalHours, summaries, description, month } = req.body;
   const docId = process.env.GOOGLE_DOC_ID;
 
   if (!docId) {
@@ -212,7 +212,7 @@ app.post('/api/create-invoice', async (req, res) => {
     const copyRes = await drive.files.copy({
       fileId: docId,
       requestBody: {
-        name: `Invoice – ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+        name: `Understood_Invoice_${month || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
       },
     });
     const newDocId = copyRes.data.id;

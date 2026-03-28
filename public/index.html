@@ -241,6 +241,59 @@
       border-color: var(--success);
     }
 
+    .invoice-actions {
+      display: none;
+      gap: 0.75rem;
+    }
+
+    .invoice-actions.visible {
+      display: flex;
+    }
+
+    .btn-action {
+      flex: 1;
+      padding: 0.875rem 1rem;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      letter-spacing: 0.01em;
+    }
+
+    .btn-action:hover {
+      opacity: 0.88;
+      transform: translateY(-1px);
+    }
+
+    .btn-action.view {
+      background: linear-gradient(135deg, var(--accent), #845ef7);
+      color: #fff;
+      box-shadow: 0 0 0 0 var(--accent-glow);
+    }
+
+    .btn-action.view:hover {
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+
+    .btn-action.download {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-action.download:hover {
+      border-color: var(--accent);
+      background: rgba(92, 124, 250, 0.08);
+    }
+
     .summary-display {
       width: 100%;
       background: var(--surface2);
@@ -440,9 +493,13 @@
         <div class="spinner" id="createSpinner"></div>
       </button>
 
-      <div class="doc-link-box" id="docLinkBox">
-        <span>✅</span>
-        <a id="docLink" href="#" target="_blank">Open Invoice →</a>
+      <div class="invoice-actions" id="invoiceActions">
+        <a class="btn-action view" id="viewInvoiceBtn" href="#" target="_blank">
+          📄 View Invoice
+        </a>
+        <a class="btn-action download" id="downloadPdfBtn" href="#" target="_blank">
+          ⬇️ Download PDF
+        </a>
       </div>
     </div>
   </div>
@@ -523,8 +580,11 @@
         document.getElementById('summaryLabel').textContent =
           data.month ? `Work Summary for ${data.month}` : 'Work Summary';
         lastData = data;
-        document.getElementById('docLinkBox').classList.remove('visible');
-        document.getElementById('docLink').href = '#';
+        // Reset invoice action buttons for a fresh run
+        document.getElementById('invoiceActions').classList.remove('visible');
+        document.getElementById('viewInvoiceBtn').href = '#';
+        document.getElementById('downloadPdfBtn').href = '#';
+        document.getElementById('createBtn').style.display = '';
 
         res.classList.add('visible');
         document.getElementById('generateBtn').style.display = 'none';
@@ -563,14 +623,12 @@
       const label   = document.getElementById('createBtnText');
       const spin    = document.getElementById('createSpinner');
       const err     = document.getElementById('errorBox');
-      const linkBox = document.getElementById('docLinkBox');
 
       btn.disabled = true;
       icon.style.display = 'none';
       spin.style.display = 'block';
       label.textContent = 'Creating invoice…';
       err.classList.remove('visible');
-      linkBox.classList.remove('visible');
 
       try {
         const description = document.getElementById('descriptionText').value.trim();
@@ -582,16 +640,29 @@
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'Server error');
 
-        document.getElementById('docLink').href = data.docUrl;
-        linkBox.classList.add('visible');
+        // Extract doc ID from URL to build PDF export link
+        const docIdMatch = data.docUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        const pdfUrl = docIdMatch
+          ? `https://docs.google.com/document/d/${docIdMatch[1]}/export?format=pdf`
+          : data.docUrl;
+
+        document.getElementById('viewInvoiceBtn').href = data.docUrl;
+        document.getElementById('downloadPdfBtn').href = pdfUrl;
+
+        // Swap Create Invoice button for the action buttons
+        btn.style.display = 'none';
+        document.getElementById('invoiceActions').classList.add('visible');
       } catch (e) {
         err.textContent = '❌ ' + e.message;
         err.classList.add('visible');
       } finally {
-        btn.disabled = false;
-        icon.style.display = 'inline';
-        spin.style.display = 'none';
-        label.textContent = 'Create Invoice';
+        // Only restore button state on error (success hides it)
+        if (btn.style.display !== 'none') {
+          btn.disabled = false;
+          icon.style.display = 'inline';
+          spin.style.display = 'none';
+          label.textContent = 'Create Invoice';
+        }
       }
     }
   </script>

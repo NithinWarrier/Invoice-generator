@@ -15,7 +15,7 @@ const COL_HOURS       = 4;  // E
 const BALANCE_RANGE   = 'K16';
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/drive',
 ];
@@ -104,11 +104,15 @@ app.get('/api/generate', async (req, res) => {
     // Process rows: filter out checked rows
     const rows = rowsResp.data.values || [];
     const summaries = [];
+    const unbilledRowNums = [];  // 1-based spreadsheet row numbers
     let totalHours = 0;
     let checkedCount = 0;
     const monthCounts = {};
 
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const sheetRowNum = i + 2; // data starts at row 2
+
       // Stop at the first row where column A is empty
       if (!(row[0] || '').trim()) break;
 
@@ -116,12 +120,14 @@ app.get('/api/generate', async (req, res) => {
       const isBilled = checkmark === 'TRUE';
       if (isBilled) { checkedCount++; continue; }
 
+      // Track this as an unbilled row
+      unbilledRowNums.push(sheetRowNum);
+
       // Track month from column A date (format: dd/mm/yyyy) for unbilled rows
       const dateStr = (row[0] || '').trim();
       if (dateStr) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
-          // parts[0]=dd, parts[1]=mm, parts[2]=yyyy
           const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
           if (!isNaN(d)) {
             const key = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -145,6 +151,7 @@ app.get('/api/generate', async (req, res) => {
       totalHours: Math.round(totalHours * 100) / 100,
       summaries,
       month,
+      unbilledRowNums,
     });
   } catch (err) {
     console.error('Error fetching sheet:', err.message);
@@ -196,7 +203,7 @@ app.get('/api/month', async (req, res) => {
 
 // ── Create Invoice: populate Google Doc template ─────────────────────────
 app.post('/api/create-invoice', async (req, res) => {
-  const { balance, totalHours, summaries, description, month } = req.body;
+  const { balance, totalHours, summaries, description, month, unbilledRowNums = [] } = req.body;
   const docId = process.env.GOOGLE_DOC_ID;
 
   if (!docId) {
@@ -257,6 +264,34 @@ app.post('/api/create-invoice', async (req, res) => {
     });
 
     const docUrl = `https://docs.google.com/document/d/${newDocId}/edit`;
+
+    // 4. Tick the checkbox (column G) for each invoiced row in the sheet
+    if (unbilledRowNums.length > 0) {
+      const sheets = google.sheets({ version: 'v4', auth });
+      const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+      const meta = await sheets.spreadsheets.get({ spreadsheetId });
+      const sheetId = meta.data.sheets[0].properties.sheetId;  // numeric ID for batchUpdate
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: unbilledRowNums.map(rowNum => ({
+            updateCells: {
+              range: {
+                sheetId,
+                startRowIndex: rowNum - 1,  // 0-based
+                endRowIndex:   rowNum,
+                startColumnIndex: 6,        // G (0-based)
+                endColumnIndex:   7,
+              },
+              rows: [{ values: [{ userEnteredValue: { boolValue: true } }] }],
+              fields: 'userEnteredValue',
+            },
+          })),
+        },
+      });
+    }
+
     res.json({ docUrl });
   } catch (err) {
     const detail = err.response?.data || err.message;

@@ -6,13 +6,13 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Column config (0-based index)
-const COL_CHECKMARK   = 6;  // G
+const COL_CHECKMARK = 6;  // G
 const COL_DESCRIPTION = 1;  // B
-const COL_HOURS       = 4;  // E
-const BALANCE_RANGE   = 'K16';
+const COL_HOURS = 4;  // E
+const BALANCE_RANGE = 'K16';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
@@ -213,7 +213,7 @@ app.post('/api/create-invoice', async (req, res) => {
   try {
     const auth = getAuthClient();
     const drive = google.drive({ version: 'v3', auth });
-    const docs  = google.docs({ version: 'v1', auth });
+    const docs = google.docs({ version: 'v1', auth });
 
     // 1. Copy the template so the original stays pristine
     const copyRes = await drive.files.copy({
@@ -226,8 +226,8 @@ app.post('/api/create-invoice', async (req, res) => {
 
     // 2. Format values
     const balanceStr = '$' + Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const hoursStr   = totalHours + ' hrs';
-    const dateStr    = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hoursStr = totalHours + ' hrs';
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
     // 3. Replace placeholders in the copied doc
     await docs.documents.batchUpdate({
@@ -280,9 +280,9 @@ app.post('/api/create-invoice', async (req, res) => {
               range: {
                 sheetId,
                 startRowIndex: rowNum - 1,  // 0-based
-                endRowIndex:   rowNum,
+                endRowIndex: rowNum,
                 startColumnIndex: 6,        // G (0-based)
-                endColumnIndex:   7,
+                endColumnIndex: 7,
               },
               rows: [{ values: [{ userEnteredValue: { boolValue: true } }] }],
               fields: 'userEnteredValue',
